@@ -1,0 +1,62 @@
+---
+# Instala Vagrant (repo oficial de HashiCorp) y el plugin vagrant-libvirt.
+# Requiere que el rol kvm ya haya corrido: el plugin se compila al
+# instalarse y necesita libvirt-dev, ruby-dev y build-essential (ADR-002 en
+# docs/decisiones.md — por eso el orden kvm -> vagrant en site.yml).
+- name: Create directory for HashiCorp GPG key
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download official HashiCorp GPG key
+  ansible.builtin.get_url:
+    url: https://apt.releases.hashicorp.com/gpg
+    dest: /etc/apt/keyrings/hashicorp.asc
+    mode: '0644'
+
+- name: Add official HashiCorp repository
+  ansible.builtin.deb822_repository:
+    name: hashicorp
+    types: deb
+    architectures: amd64
+    signed_by: /etc/apt/keyrings/hashicorp.asc
+    uris: https://apt.releases.hashicorp.com
+    suites: jammy
+    components: main
+    state: present
+  register: hashicorp_repo_status
+
+- name: Update apt cache only if repo was just added
+  ansible.builtin.apt:
+    update_cache: yes
+  when: hashicorp_repo_status.changed
+
+- name: Install vagrant
+  ansible.builtin.apt:
+    name: vagrant
+    state: present
+
+# El plugin no es un paquete apt: se instala con el propio Vagrant, que lo
+# compila localmente. Por eso este paso puede tardar 1-2 minutos.
+#
+# 'vagrant plugin install' no es idempotente por sí solo: reinstala y
+# reporta éxito aunque el plugin ya esté presente (verificado a mano: el
+# stdout dice "Installed the plugin" las dos veces). Por eso se comprueba
+# antes con 'vagrant plugin list' y solo se instala si falta.
+- name: Check if vagrant-libvirt plugin is already installed
+  ansible.builtin.command: vagrant plugin list
+  register: plugin_list
+  changed_when: false
+  become: yes
+  become_user: azureuser
+  environment:
+    HOME: /home/azureuser
+
+- name: Install vagrant-libvirt plugin
+  ansible.builtin.command: vagrant plugin install vagrant-libvirt
+  become: yes
+  become_user: azureuser
+  environment:
+    HOME: /home/azureuser
+  when: "'vagrant-libvirt' not in plugin_list.stdout"
