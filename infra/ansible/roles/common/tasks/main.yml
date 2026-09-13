@@ -14,3 +14,26 @@
       - net-tools
       - ufw
     state: present
+
+# Defensa en profundidad: el NSG de Azure ya restringe a solo 22, pero un
+# firewall local evita que un puerto abierto por error en el NSG (o algo
+# que escuche en 0.0.0.0 sin querer) quede expuesto sin una segunda barrera.
+- name: Allow SSH before enabling ufw (evita cortar el propio acceso)
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Set ufw default deny incoming
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Set ufw default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled
