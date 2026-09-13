@@ -1,0 +1,66 @@
+---
+# Portado de cloud-1/roles/install_docker, adaptado al usuario de este
+# proyecto (azureuser, ver infra/terraform y el Makefile) en vez de "ansible".
+- name: Install prerequisites for Docker installation
+  ansible.builtin.apt:
+    name: python3-debian
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create directory for Docker security key
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: One way to avoid apt_key once it's removed from your distro
+  block:
+    - name: Download official Docker GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add official docker repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        architectures: amd64
+        signed_by: /etc/apt/keyrings/docker.asc
+        uris: https://download.docker.com/linux/ubuntu
+        suites: jammy
+        components: stable
+        state: present
+      register: docker_repo_status
+
+- name: Update apt cache only if repo was just added
+  ansible.builtin.apt:
+    update_cache: yes
+  when: docker_repo_status.changed
+
+- name: Install docker and docker compose
+  ansible.builtin.apt:
+    pkg:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose
+      - docker-compose-plugin
+    state: present
+
+- name: Start docker service automatically
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add azureuser to docker group
+  ansible.builtin.user:
+    name: azureuser
+    groups: docker
+    append: yes
+  become: yes
+
+- name: Reset connection to apply group membership
+  ansible.builtin.meta: reset_connection

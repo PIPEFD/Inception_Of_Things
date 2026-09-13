@@ -1,0 +1,10 @@
+# Copia este archivo a terraform.tfvars y ajusta si hace falta.
+# terraform.tfvars NUNCA se versiona (ver .gitignore) — no porque tenga
+# secretos aquí, sino por convención: es config local de cada quien.
+
+resource_group      = "rg-iot-42"
+location             = "swedencentral"
+vm_name              = "vm-iot-host"
+vm_size              = "Standard_D2d_v4" # serie con virtualización anidada, ver ADR-003
+admin_username       = "azureuser"
+ssh_public_key_path  = "~/.ssh/iot42_rsa.pub" # debe ser RSA, ver variables.tf

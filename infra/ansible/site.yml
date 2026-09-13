@@ -1,0 +1,15 @@
+---
+# Deja el host listo para ejecutar el subject (capa 2, ver docs/arquitectura.md).
+# Orden de roles: kvm ANTES que vagrant (ADR-002 en docs/decisiones.md) — el
+# plugin vagrant-libvirt se compila al instalarse y necesita libvirt-dev,
+# que pone el rol kvm.
+- name: Aprovisionar host IoT
+  hosts: iot_host
+  become: yes
+
+  roles:
+    - common
+    - kvm
+    - vagrant
+    - docker
+    - k3s-tools
