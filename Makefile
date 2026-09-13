@@ -6,14 +6,25 @@ SHELL := /bin/bash
 RG          ?= rg-iot-42
 LOCATION    ?= swedencentral
 VM_NAME     ?= vm-iot-host
+# Debe coincidir con admin_username en infra/terraform/variables.tf --
+# antes estaba repetido a mano en 4 sitios distintos de este Makefile.
+ADMIN_USER  ?= azureuser
 SSH_KEY     ?= $(HOME)/.ssh/iot42_rsa
 TF_DIR      ?= infra/terraform
 ANSIBLE_DIR ?= infra/ansible
+VAULT_PASS_FILE ?= $(HOME)/.iot42_vault_pass
 
 # IP del host: se obtiene de la salida de Terraform, nunca se escribe a mano
 HOST_IP = $(shell cd $(TF_DIR) && terraform output -raw public_ip 2>/dev/null)
-SSH     = ssh -i $(SSH_KEY) -o StrictHostKeyChecking=accept-new azureuser@$(HOST_IP)
-REMOTE  = /home/azureuser/iot
+SSH     = ssh -i $(SSH_KEY) -o StrictHostKeyChecking=accept-new $(ADMIN_USER)@$(HOST_IP)
+REMOTE  = /home/$(ADMIN_USER)/iot
+
+# .env (gitignored): credenciales del Service Principal de Azure, así
+# terraform no depende de 'az login' interactivo de cada persona. Si no
+# existe, estas variables quedan vacías y terraform sigue usando la sesión
+# az normal -- .env es opcional, no obligatorio.
+-include .env
+export ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_TENANT_ID ARM_SUBSCRIPTION_ID
 
 # ─── Sistema cliente ────────────────────────────────────────────
 # Distingue macOS / WSL-Ubuntu / Ubuntu nativo. WSL se detecta aparte de
@@ -141,14 +152,14 @@ infra: ## Crea la VM Azure con virtualización anidada
 	@echo "Host disponible en $(HOST_IP)"
 
 inventory: require-host ## Genera el inventario de Ansible desde la salida de Terraform
-	@printf '[iot_host]\n%s ansible_user=azureuser ansible_ssh_private_key_file=%s ansible_python_interpreter=/usr/bin/python3\n' \
-	  "$(HOST_IP)" "$(SSH_KEY)" > $(ANSIBLE_DIR)/inventory.ini
+	@printf '[iot_host]\n%s ansible_user=%s ansible_ssh_private_key_file=%s ansible_python_interpreter=/usr/bin/python3\n' \
+	  "$(HOST_IP)" "$(ADMIN_USER)" "$(SSH_KEY)" > $(ANSIBLE_DIR)/inventory.ini
 	@printf "$(C_GREEN)Inventario escrito:$(C_RESET) %s (%s)\n" "$(ANSIBLE_DIR)/inventory.ini" "$(HOST_IP)"
 
 # ─── Capa 2: aprovisionamiento del host ────────────────────────
 provision: require-host inventory ## Instala KVM, Vagrant, Docker, kubectl y k3d
 	$(call log_section,Aprovisionando el host)
-	cd $(ANSIBLE_DIR) && ansible-playbook -i inventory.ini site.yml
+	cd $(ANSIBLE_DIR) && ansible-playbook -i inventory.ini site.yml --vault-password-file $(VAULT_PASS_FILE)
 
 check-host: require-host ## Verifica que el host puede virtualizar y tiene las herramientas
 	@# TODO: kvm-ok, vagrant --version, docker info, k3d version
@@ -189,7 +200,7 @@ ssh: require-host ## Abre una sesión en el host
 
 tunnel: require-host ## Túnel SSH para la interfaz de Argo CD (localhost:8080)
 	@( sleep 1 && $(OPEN_CMD) http://localhost:8080 >/dev/null 2>&1 & )
-	ssh -i $(SSH_KEY) -L 8080:localhost:8080 azureuser@$(HOST_IP) -N
+	ssh -i $(SSH_KEY) -L 8080:localhost:8080 $(ADMIN_USER)@$(HOST_IP) -N
 
 start: ## Arranca la VM (antes de una sesión de trabajo o la defensa)
 	$(call with_spinner,Arrancando $(VM_NAME)...,az vm start -g $(RG) -n $(VM_NAME))
@@ -218,7 +229,7 @@ TF_MIN  := 1.7.0
 ANS_MIN := 2.15.0
 AZ_MIN  := 2.60.0
 
-.PHONY: doctor ssh-key login bootstrap
+.PHONY: doctor ssh-key login bootstrap vault-pass vault-edit vault-view
 
 # $(1)=nombre mostrado  $(2)=versión mínima  $(3)=comando que imprime la versión instalada
 define check_version
@@ -292,6 +303,21 @@ ssh-key: ## Genera la clave SSH del proyecto si no existe
 login: ## Inicia sesión en Azure y muestra la suscripción activa
 	@az account show >/dev/null 2>&1 || az login
 	@az account show --query "{suscripcion:name, id:id}" -o table
+
+vault-pass: ## Genera la contraseña del vault si no existe (fuera del repo)
+	@if [ -f "$(VAULT_PASS_FILE)" ]; then \
+	  printf "$(C_YELLOW)Ya existe:$(C_RESET) %s\n" "$(VAULT_PASS_FILE)"; \
+	else \
+	  openssl rand -base64 32 > "$(VAULT_PASS_FILE)"; \
+	  chmod 600 "$(VAULT_PASS_FILE)"; \
+	  printf "$(C_GREEN)Contraseña del vault creada.$(C_RESET) NUNCA se versiona.\n"; \
+	fi
+
+vault-edit: vault-pass ## Edita infra/ansible/group_vars/all/vault.yml cifrado
+	cd $(ANSIBLE_DIR) && EDITOR=$${EDITOR:-vi} ansible-vault edit group_vars/all/vault.yml --vault-password-file $(VAULT_PASS_FILE)
+
+vault-view: vault-pass ## Muestra el contenido descifrado (solo en tu terminal, no lo compartas)
+	cd $(ANSIBLE_DIR) && ansible-vault view group_vars/all/vault.yml --vault-password-file $(VAULT_PASS_FILE)
 
 bootstrap: ssh-key login doctor ## Deja el cliente listo desde cero
 	$(call log_section,Cliente listo)

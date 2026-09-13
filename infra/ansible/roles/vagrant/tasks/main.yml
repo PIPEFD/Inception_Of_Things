@@ -49,14 +49,14 @@
   register: plugin_list
   changed_when: false
   become: yes
-  become_user: azureuser
+  become_user: "{{ ansible_user }}"
   environment:
-    HOME: /home/azureuser
+    HOME: "/home/{{ ansible_user }}"
 
 - name: Install vagrant-libvirt plugin
   ansible.builtin.command: vagrant plugin install vagrant-libvirt
   become: yes
-  become_user: azureuser
+  become_user: "{{ ansible_user }}"
   environment:
-    HOME: /home/azureuser
+    HOME: "/home/{{ ansible_user }}"
   when: "'vagrant-libvirt' not in plugin_list.stdout"

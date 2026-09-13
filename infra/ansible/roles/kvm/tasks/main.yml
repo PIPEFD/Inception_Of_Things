@@ -31,7 +31,7 @@
 
 - name: Add azureuser to kvm and libvirt groups
   ansible.builtin.user:
-    name: azureuser
+    name: "{{ ansible_user }}"
     groups: kvm,libvirt
     append: yes
 
