@@ -96,4 +96,11 @@ resource "azurerm_linux_virtual_machine" "iot" {
     sku       = "22_04-lts"
     version   = "latest"
   }
+
+  lifecycle {
+    # vm_agent_platform_updates_enabled: atributo deprecado en el provider
+    # que Azure gestiona por su cuenta tras crear la VM. Sin esto, cada
+    # 'terraform plan' muestra un diff que no es drift real, solo ruido.
+    ignore_changes = [vm_agent_platform_updates_enabled]
+  }
 }

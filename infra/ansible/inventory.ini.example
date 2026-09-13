@@ -1,0 +1,5 @@
+# No editar a mano: 'make inventory' genera infra/ansible/inventory.ini
+# (gitignored) con estos mismos campos, rellenando la IP real desde
+# 'terraform output -raw public_ip'.
+[iot_host]
+203.0.113.10 ansible_user=azureuser ansible_ssh_private_key_file=~/.ssh/iot42_rsa ansible_python_interpreter=/usr/bin/python3
