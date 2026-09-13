@@ -25,6 +25,10 @@ REMOTE  = /home/$(ADMIN_USER)/iot
 # az normal -- .env es opcional, no obligatorio.
 -include .env
 export ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_TENANT_ID ARM_SUBSCRIPTION_ID
+# También exportados para que Ansible los lea vía lookup('env', ...) en
+# group_vars/iot_host.yml -- una sola fuente de verdad (este Makefile /
+# .env), en vez de repetir "azureuser" otra vez dentro de Ansible.
+export ADMIN_USER SSH_KEY
 
 # ─── Sistema cliente ────────────────────────────────────────────
 # Distingue macOS / WSL-Ubuntu / Ubuntu nativo. WSL se detecta aparte de
@@ -152,8 +156,10 @@ infra: ## Crea la VM Azure con virtualización anidada
 	@echo "Host disponible en $(HOST_IP)"
 
 inventory: require-host ## Genera el inventario de Ansible desde la salida de Terraform
-	@printf '[iot_host]\n%s ansible_user=%s ansible_ssh_private_key_file=%s ansible_python_interpreter=/usr/bin/python3\n' \
-	  "$(HOST_IP)" "$(ADMIN_USER)" "$(SSH_KEY)" > $(ANSIBLE_DIR)/inventory.ini
+	@# Solo la IP -- lo único realmente dinámico. Usuario/clave/intérprete
+	@# viven en group_vars/iot_host.yml, expandidos desde el mismo entorno
+	@# (ADMIN_USER/SSH_KEY) que usa este Makefile: una sola fuente de verdad.
+	@printf '[iot_host]\n%s\n' "$(HOST_IP)" > $(ANSIBLE_DIR)/inventory.ini
 	@printf "$(C_GREEN)Inventario escrito:$(C_RESET) %s (%s)\n" "$(ANSIBLE_DIR)/inventory.ini" "$(HOST_IP)"
 
 # ─── Capa 2: aprovisionamiento del host ────────────────────────

@@ -1,0 +1,12 @@
+---
+# Conexión al host iot_host. Nada de esto es secreto ni cambia entre
+# ejecuciones -- por eso vive aquí, trackeado, en vez de horneado a mano
+# en infra/ansible/inventory.ini (que solo tiene la IP, lo único dinámico).
+#
+# Se expande desde el mismo ADMIN_USER/SSH_KEY que usa el Makefile
+# (exportados al entorno antes de invocar ansible-playbook) -- una sola
+# fuente de verdad. El 'default(...)' cubre el caso de correr ansible-*
+# directamente, sin pasar por el Makefile.
+ansible_user: "{{ lookup('env', 'ADMIN_USER') | default('azureuser', true) }}"
+ansible_ssh_private_key_file: "{{ lookup('env', 'SSH_KEY') | default(lookup('env', 'HOME') + '/.ssh/iot42_rsa', true) }}"
+ansible_python_interpreter: /usr/bin/python3
