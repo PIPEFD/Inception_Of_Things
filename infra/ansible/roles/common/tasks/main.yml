@@ -1,0 +1,16 @@
+---
+# Portado de cloud-1/roles/setup_system — paquetes base del host.
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600 # solo refrescar si la última vez fue hace más de 1h
+
+- name: Install essential system packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - net-tools
+      - ufw
+    state: present

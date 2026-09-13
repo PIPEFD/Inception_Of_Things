@@ -1,0 +1,48 @@
+---
+# Convierte el ADR-003 (docs/decisiones.md) en un fallo explícito: si el
+# tamaño de VM no soporta virtualización anidada, este rol para aquí en vez
+# de dejar que el fallo aparezca silenciosamente más tarde en 'vagrant up'
+# dentro de la VM anidada.
+- name: Check hardware virtualization extension is present (vmx/svm)
+  ansible.builtin.command: grep -oE 'vmx|svm' /proc/cpuinfo
+  register: cpu_virt_flag
+  changed_when: false
+  failed_when: cpu_virt_flag.stdout == ""
+
+- name: Install KVM/libvirt and build dependencies for vagrant-libvirt
+  ansible.builtin.apt:
+    name:
+      - qemu-kvm
+      - libvirt-daemon-system
+      - libvirt-clients
+      - libvirt-dev  # necesario para compilar el plugin vagrant-libvirt (ver rol vagrant)
+      - bridge-utils
+      - cpu-checker  # provee kvm-ok
+      - ruby-dev
+      - build-essential
+    state: present
+    update_cache: yes
+
+- name: Start and enable libvirtd
+  ansible.builtin.systemd:
+    name: libvirtd
+    state: started
+    enabled: yes
+
+- name: Add azureuser to kvm and libvirt groups
+  ansible.builtin.user:
+    name: azureuser
+    groups: kvm,libvirt
+    append: yes
+
+- name: Reset connection to apply group membership
+  ansible.builtin.meta: reset_connection
+
+# La verificación real con la herramienta del subject (kvm-ok), no solo el
+# flag de /proc/cpuinfo: kvm-ok también comprueba que el módulo del kernel
+# está cargado y que no hay virtualización anidada desactivada por BIOS/host.
+- name: Verify KVM acceleration is usable (kvm-ok)
+  ansible.builtin.command: kvm-ok
+  register: kvm_ok_result
+  changed_when: false
+  failed_when: "'KVM acceleration can be used' not in kvm_ok_result.stdout"
