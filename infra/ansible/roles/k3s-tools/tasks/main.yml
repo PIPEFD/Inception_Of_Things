@@ -1,0 +1,27 @@
+---
+# kubectl en el host: hace falta para hablar con los K3s que levantarán las
+# VMs de p1/p2 (que corren dentro de este host, vía Vagrant+libvirt).
+- name: Check current kubectl version (if installed)
+  ansible.builtin.command: kubectl version --client -o json
+  register: kubectl_current
+  changed_when: false
+  failed_when: false
+
+- name: Get latest stable kubectl version
+  ansible.builtin.uri:
+    url: https://dl.k8s.io/release/stable.txt
+    return_content: yes
+  register: kubectl_stable
+  when: kubectl_current.rc != 0
+
+- name: Download kubectl binary
+  ansible.builtin.get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_stable.content }}/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: '0755'
+  when: kubectl_current.rc != 0
+
+- name: Verify kubectl is usable
+  ansible.builtin.command: kubectl version --client
+  register: kubectl_check
+  changed_when: false
